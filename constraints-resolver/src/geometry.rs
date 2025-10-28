@@ -1,4 +1,14 @@
-use crate::types::{Rectangle, Room};
+use crate::types::Room;
+
+
+/// A rectangle with a position and size.
+#[derive(Debug, Clone, Copy)]
+pub struct Rectangle {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
 
 impl Rectangle {
 
