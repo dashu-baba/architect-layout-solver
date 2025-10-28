@@ -178,7 +178,7 @@ mod tests {
                 x,
                 y
             );
-        }ß
+        }
     }
 
     // Test 8: test_generate_candidate_positions_returns_candidates
