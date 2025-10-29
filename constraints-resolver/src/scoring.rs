@@ -121,22 +121,20 @@ fn check_hard_constraints(
         }
     }
 
-    // Must be adjacent to required rooms
+    // Must be adjacent to required rooms (only check if those rooms are already placed)
     for adjacent in room_req.adjacent_to.iter() {
-        let mut found_adjacent = false;
-        for placed in already_placed {
-            if placed.id == *adjacent {
-                let existing_rect = Rectangle::from_room(placed);
-                if room_rect.is_adjacent_to(&existing_rect) {
-                    found_adjacent = true;
-                    break;
-                }
+        // Check if the required adjacent room has been placed
+        let required_room_placed = already_placed.iter().find(|r| r.id == *adjacent);
+        
+        if let Some(required_room) = required_room_placed {
+            // Room has been placed, so check adjacency
+            let existing_rect = Rectangle::from_room(required_room);
+            if !room_rect.is_adjacent_to(&existing_rect) {
+                violations.push(format!("Room is not adjacent to required room: {}", adjacent));
             }
         }
-
-        if !found_adjacent {
-            violations.push(format!("Room is not adjacent to required room: {}", adjacent));
-        }
+        // If the required room hasn't been placed yet, skip this check
+        // (it will be validated when that room is placed later)
     }
 
 
