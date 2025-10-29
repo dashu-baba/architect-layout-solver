@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Room Layout Solver - Residential Apartment</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .description {
+            color: #666;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-left: 4px solid #4ECDC4;
+            border-radius: 4px;
+        }
+        .constraints-list {
+            list-style: none;
+            padding: 0;
+            margin: 10px 0;
+        }
+        .constraints-list li {
+            padding: 5px 0;
+            padding-left: 20px;
+            position: relative;
+        }
+        .constraints-list li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #4ECDC4;
+            font-weight: bold;
+        }
+        #canvas { 
+            border: 2px solid #ccc; 
+            display: block;
+            margin: 20px auto;
+            background: white;
+        }
+        .controls { 
+            margin: 20px 0;
+            text-align: center;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 0 5px;
+            font-size: 14px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            background: #4ECDC4;
+            color: white;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #45B7D1;
+        }
+        button:active {
+            transform: translateY(1px);
+        }
+        #stats {
+            display: block;
+            margin-top: 15px;
+            padding: 10px;
+            background: #e8f5e9;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .legend {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 4px;
+        }
+        .legend-item {
+            display: inline-block;
+            margin: 5px 15px 5px 0;
+        }
+        .legend-color {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            margin-right: 5px;
+            vertical-align: middle;
+            border: 1px solid #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏠 Constraint-Based Room Layout Solver</h1>
+        <div class="description">
+            <h3>Residential Apartment Layout (85m² footprint)</h3>
+            <ul class="constraints-list">
+                <li>Master bedroom: minimum 12m² (with attached bathroom)</li>
+                <li>Two smaller bedrooms: minimum 9m² each</li>
+                <li>Living room: minimum 20m²</li>
+                <li>Kitchen: must be adjacent to living room</li>
+                <li>Bathroom: minimum 4m² (needs external wall for ventilation)</li>
+                <li>Master bathroom: attached to master bedroom</li>
+                <li>Hallway: connects all rooms</li>
+                <li>Building code: bedrooms can't directly open into kitchen</li>
+            </ul>
+        </div>
+        
+        <div class="controls">
+            <button id="solve-btn">🔍 Solve Layout</button>
+            <button id="clear-btn">🗑️ Clear</button>
+        </div>
+        
+        <canvas id="canvas" width="900" height="700"></canvas>
+        
+        <div id="stats"></div>
+        
+        <div class="legend">
+            <strong>Room Legend:</strong><br>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #FF6B6B;"></span>
+                <span>Master Bedroom</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #FFA07A;"></span>
+                <span>Bedroom 2</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #FFD93D;"></span>
+                <span>Bedroom 3</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #4ECDC4;"></span>
+                <span>Living Room</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #95E1D3;"></span>
+                <span>Kitchen</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #A8E6CF;"></span>
+                <span>Main Bathroom</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #C7CEEA;"></span>
+                <span>Master Bathroom</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #E0E0E0;"></span>
+                <span>Hallway</span>
+            </div>
+        </div>
+    </div>
+    
+    <script type="module">
+        import init, { solve_layout } from '../pkg/constraints_resolver.js';
+        
+        async function run() {
+            await init();
+            //init_logging(); // Initialize browser console logging
+            
+            // Residential apartment configuration with all constraints
+            // Total footprint: 85m² (approximately 10m x 8.5m)
+            const rooms = [
+                {
+                    id: "master_bedroom",
+                    min_area: 12.0,
+                    adjacent_to: ["master_bathroom"],
+                    not_adjacent_to: ["kitchen"],
+                    has_exterior_wall: true
+                },
+                {
+                    id: "bedroom_2",
+                    min_area: 9.0,
+                    adjacent_to: ["hallway"],
+                    not_adjacent_to: ["kitchen"],
+                    has_exterior_wall: true
+                },
+                {
+                    id: "bedroom_3",
+                    min_area: 9.0,
+                    adjacent_to: ["hallway"],
+                    not_adjacent_to: ["kitchen"],
+                    has_exterior_wall: true
+                },
+                {
+                    id: "living_room",
+                    min_area: 20.0,
+                    adjacent_to: ["kitchen"],
+                    not_adjacent_to: [],
+                    has_exterior_wall: true
+                },
+                {
+                    id: "kitchen",
+                    min_area: 8.0,
+                    adjacent_to: ["living_room"],
+                    not_adjacent_to: ["master_bedroom", "bedroom_2", "bedroom_3"],
+                    has_exterior_wall: false
+                },
+                {
+                    id: "main_bathroom",
+                    min_area: 4.0,
+                    adjacent_to: ["hallway"],
+                    not_adjacent_to: [],
+                    has_exterior_wall: true
+                },
+                {
+                    id: "master_bathroom",
+                    min_area: 4.0,
+                    adjacent_to: ["master_bedroom"],
+                    not_adjacent_to: [],
+                    has_exterior_wall: true
+                },
+                {
+                    id: "hallway",
+                    min_area: 5.0,
+                    adjacent_to: ["bedroom_2", "bedroom_3", "main_bathroom", "living_room"],
+                    not_adjacent_to: [],
+                    has_exterior_wall: false
+                }
+            ];
+            
+            document.getElementById('solve-btn').onclick = async () => {
+                const statsEl = document.getElementById('stats');
+                statsEl.textContent = 'Solving... This may take a few moments.';
+                statsEl.style.background = '#fff3cd';
+                
+                try {
+                    // 85m² footprint - trying different aspect ratios
+                    // Option 1: 10m x 8.5m
+                    const solution = solve_layout(rooms, 10.0, 8.5);
+                    drawSolution(solution);
+                    
+                    statsEl.style.background = '#e8f5e9';
+                    statsEl.innerHTML = 
+                        `✅ <strong>Solution Found!</strong><br>` +
+                        `Score: ${solution.score.toFixed(2)} | ` +
+                        `Time: ${solution.computation_time_ms}ms | ` +
+                        `Total Area: ${(10.0 * 8.5).toFixed(1)}m²`;
+                } catch (e) {
+                    console.error("Solver error:", e);
+                    statsEl.style.background = '#ffebee';
+                    statsEl.textContent = `❌ Error: ${e.message || e}`;
+                }
+            };
+            
+            document.getElementById('clear-btn').onclick = () => {
+                const canvas = document.getElementById('canvas');
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                document.getElementById('stats').textContent = '';
+            };
+        }
+        
+        function drawSolution(solution) {
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Scale factor - fit 10m width to 800px
+            const scale = 70; // 70 pixels per meter
+            const offsetX = 50;
+            const offsetY = 50;
+            
+            // Room colors matching the legend
+            const roomColors = {
+                'master_bedroom': '#FF6B6B',
+                'bedroom_2': '#FFA07A',
+                'bedroom_3': '#FFD93D',
+                'living_room': '#4ECDC4',
+                'kitchen': '#95E1D3',
+                'main_bathroom': '#A8E6CF',
+                'master_bathroom': '#C7CEEA',
+                'hallway': '#E0E0E0'
+            };
+            
+            // Draw each room
+            solution.rooms.forEach((room) => {
+                const x = room.x * scale + offsetX;
+                const y = room.y * scale + offsetY;
+                const width = room.width * scale;
+                const height = room.height * scale;
+                
+                // Fill room with color
+                ctx.fillStyle = roomColors[room.id] || '#CCCCCC';
+                ctx.fillRect(x, y, width, height);
+                
+                // Draw border
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x, y, width, height);
+                
+                // Draw room label
+                ctx.fillStyle = '#000';
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                // Format room name
+                const roomName = room.id.split('_').map(word => 
+                    word.charAt(0).toUpperCase() + word.slice(1)
+                ).join(' ');
+                
+                // Calculate room area
+                const area = (room.width * room.height).toFixed(1);
+                
+                // Draw room name
+                ctx.fillText(roomName, x + width/2, y + height/2 - 8);
+                
+                // Draw area
+                ctx.font = '11px Arial';
+                ctx.fillStyle = '#555';
+                ctx.fillText(`${area}m²`, x + width/2, y + height/2 + 8);
+            });
+            
+            // Draw building outline
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(offsetX, offsetY, 10 * scale, 8.5 * scale);
+            
+            // Reset text alignment
+            ctx.textAlign = 'start';
+            ctx.textBaseline = 'alphabetic';
+        }
+        
+        run();
+    </script>
+</body>
+</html>
