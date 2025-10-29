@@ -183,12 +183,11 @@
     </div>
     
     <script type="module">
-        import init, { solve_layout } from '../pkg/constraints_resolver.js';
+        // Use Web Worker for async solving
+        let solverWorker = null;
+        let currentSolveTimeout = null;
         
         async function run() {
-            await init();
-            //init_logging(); // Initialize browser console logging
-            
             // Default example configuration
             const exampleRooms = [
                 {
@@ -256,11 +255,8 @@
             document.getElementById('solve-btn').onclick = async () => {
                 const statsEl = document.getElementById('stats');
                 const errorEl = document.getElementById('error-msg');
+                const solveBtn = document.getElementById('solve-btn');
                 errorEl.style.display = 'none';
-                
-                statsEl.textContent = '⏳ Solving... This may take a few moments.';
-                statsEl.style.background = '#fff3cd';
-                statsEl.style.display = 'block';
                 
                 try {
                     // Parse JSON input
@@ -276,24 +272,135 @@
                     const boundaryWidth = parseFloat(document.getElementById('boundary-width').value);
                     const boundaryHeight = parseFloat(document.getElementById('boundary-height').value);
                     
-                    // Solve layout
-                    const solution = solve_layout(rooms, boundaryWidth, boundaryHeight);
-                    drawSolution(solution, boundaryWidth, boundaryHeight);
+                    // Start solving with Web Worker
+                    await solveWithWorker(rooms, boundaryWidth, boundaryHeight, statsEl, errorEl, solveBtn);
                     
-                    statsEl.style.background = '#e8f5e9';
-                    statsEl.innerHTML = 
-                        `✅ <strong>Solution Found!</strong><br>` +
-                        `Score: ${solution.score.toFixed(2)} | ` +
-                        `Time: ${solution.computation_time_ms}ms | ` +
-                        `Rooms: ${solution.rooms.length} | ` +
-                        `Boundary: ${boundaryWidth}m × ${boundaryHeight}m (${(boundaryWidth * boundaryHeight).toFixed(1)}m²)`;
                 } catch (e) {
                     console.error("Error:", e);
                     statsEl.style.display = 'none';
                     errorEl.style.display = 'block';
                     errorEl.innerHTML = `<strong>❌ Error:</strong> ${e.message || e}`;
+                    solveBtn.disabled = false;
+                    solveBtn.textContent = '🔍 Solve Layout';
                 }
             };
+            
+            async function solveWithWorker(rooms, boundaryWidth, boundaryHeight, statsEl, errorEl, solveBtn) {
+                // Terminate any existing worker
+                if (solverWorker) {
+                    solverWorker.terminate();
+                    clearTimeout(currentSolveTimeout);
+                }
+                
+                // Disable button during solving
+                solveBtn.disabled = true;
+                solveBtn.textContent = '⏳ Solving...';
+                
+                // Show progress message
+                const complexWarning = rooms.length > 6 
+                    ? '<br><small>Complex layout detected - this may take 10-30 seconds</small>'
+                    : '';
+                statsEl.innerHTML = '⏳ Solving asynchronously... ' + 
+                    '<span id="timer">0s</span>' + complexWarning;
+                statsEl.style.background = '#fff3cd';
+                statsEl.style.display = 'block';
+                
+                // Start timer display
+                const startTime = Date.now();
+                const timerInterval = setInterval(() => {
+                    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                    const timerEl = document.getElementById('timer');
+                    if (timerEl) timerEl.textContent = elapsed + 's';
+                }, 100);
+                
+                // Create new worker
+                solverWorker = new Worker('./solver-worker.js', { type: 'module' });
+                
+                // Set up timeout (30 seconds)
+                const TIMEOUT_MS = 300000;
+                currentSolveTimeout = setTimeout(() => {
+                    solverWorker.terminate();
+                    clearInterval(timerInterval);
+                    statsEl.style.display = 'none';
+                    errorEl.style.display = 'block';
+                    errorEl.innerHTML = 
+                        '<strong>❌ Timeout:</strong> Solver took longer than 30 seconds.<br><br>' +
+                        '<strong>💡 Suggestions:</strong><ul style="text-align: left; margin: 10px 0;">' +
+                        '<li>Increase boundary dimensions (width/height)</li>' +
+                        '<li>Reduce the number of rooms</li>' +
+                        '<li>Simplify adjacency constraints</li>' +
+                        '<li>Reduce minimum area requirements</li>' +
+                        '</ul>';
+                    solveBtn.disabled = false;
+                    solveBtn.textContent = '🔍 Solve Layout';
+                }, TIMEOUT_MS);
+                
+                // Handle worker response
+                solverWorker.onmessage = function(e) {
+                    clearTimeout(currentSolveTimeout);
+                    clearInterval(timerInterval);
+                    
+                    if (e.data.success) {
+                        const solution = e.data.solution;
+                        const elapsed = e.data.elapsed;
+                        
+                        drawSolution(solution, boundaryWidth, boundaryHeight);
+                        
+                        statsEl.style.background = '#e8f5e9';
+                        statsEl.innerHTML = 
+                            `✅ <strong>Solution Found!</strong><br>` +
+                            `Score: ${solution.score.toFixed(2)} | ` +
+                            `Time: ${elapsed}ms (${(elapsed/1000).toFixed(1)}s) | ` +
+                            `Rooms: ${solution.rooms.length} | ` +
+                            `Boundary: ${boundaryWidth}m × ${boundaryHeight}m (${(boundaryWidth * boundaryHeight).toFixed(1)}m²)`;
+                    } else {
+                        statsEl.style.display = 'none';
+                        errorEl.style.display = 'block';
+                        
+                        let errorMsg = e.data.error;
+                        
+                        // Provide helpful suggestions for common issues
+                        if (errorMsg.includes('No valid solution')) {
+                            errorMsg += '<br><br><strong>💡 Suggestions:</strong><ul style="text-align: left; margin: 10px 0;">' +
+                                '<li>Increase boundary dimensions (width/height)</li>' +
+                                '<li>Reduce the number of rooms</li>' +
+                                '<li>Simplify adjacency constraints (fewer adjacent_to/not_adjacent_to)</li>' +
+                                '<li>Reduce minimum area requirements</li>' +
+                                '<li>Try removing has_exterior_wall requirements</li>' +
+                                '</ul>';
+                        }
+                        
+                        errorEl.innerHTML = `<strong>❌ Error:</strong> ${errorMsg}`;
+                    }
+                    
+                    // Re-enable button
+                    solveBtn.disabled = false;
+                    solveBtn.textContent = '🔍 Solve Layout';
+                    
+                    // Clean up worker
+                    solverWorker.terminate();
+                    solverWorker = null;
+                };
+                
+                // Handle worker errors
+                solverWorker.onerror = function(error) {
+                    clearTimeout(currentSolveTimeout);
+                    clearInterval(timerInterval);
+                    console.error("Worker error:", error);
+                    statsEl.style.display = 'none';
+                    errorEl.style.display = 'block';
+                    errorEl.innerHTML = `<strong>❌ Worker Error:</strong> ${error.message}`;
+                    solveBtn.disabled = false;
+                    solveBtn.textContent = '🔍 Solve Layout';
+                };
+                
+                // Send work to worker
+                solverWorker.postMessage({
+                    rooms: rooms,
+                    boundaryWidth: boundaryWidth,
+                    boundaryHeight: boundaryHeight
+                });
+            }
             
             document.getElementById('clear-btn').onclick = () => {
                 const canvas = document.getElementById('canvas');
