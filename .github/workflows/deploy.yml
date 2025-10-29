@@ -40,6 +40,8 @@ jobs:
           mkdir -p dist
           cp -r constraints-resolver/demo/* dist/
           cp -r constraints-resolver/pkg dist/
+          # Fix the import path in solver-worker.js for deployment
+          sed -i "s|from '../pkg/constraints_resolver.js'|from './pkg/constraints_resolver.js'|g" dist/solver-worker.js
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
